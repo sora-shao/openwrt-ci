@@ -162,7 +162,7 @@ jobs:
         mkdir -p ./output/release_files
         # 适配 qualcommax 路径
         find openwrt/bin/targets/qualcommax/ipq60xx/ -type f \( -name "*factory*" -o -name "*sysupgrade*" \) -exec cp {} ./output/release_files/ \;
-        tar -zcvf ./output/release_files/packages-${{ matrix.device }}.tgz -C bin/targets/qualcommax/ipq60xx/ packages/
+        tar -zcvf ./output/release_files/packages-${{ matrix.device }}.tgz -C openwrt/bin/targets/qualcommax/ipq60xx/ packages/
         echo "release_name=${{ matrix.device }}-$(date +'%Y-%m-%d-%H%M')" >> $GITHUB_OUTPUT
         echo "status=success" >> $GITHUB_OUTPUT
 
