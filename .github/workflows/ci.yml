@@ -1,0 +1,190 @@
+name: CI (Adapted Source Build)
+
+on:
+  workflow_dispatch:
+    inputs:
+      repo_url:
+        description: '🌐 OpenWrt 源码地址'
+        required: true
+        default: 'https://github.com/sora-shao/openwrt-private'
+      repo_branch:
+        description: '🌿 源码分支'
+        required: true
+        default: 'openwrt-v25.12.1'
+      build_parallel:
+        description: '🚀 开启并行编译 (同时跑两个设备)'
+        required: false
+        type: boolean
+        default: false
+      single_device:
+        description: '📱 单一目标设备 (不并行时生效)'
+        required: true
+        default: 'nn6000-v2'
+        type: choice
+        options:
+          - 'nn6000-v2'
+          - 're-ss-01'
+      extra_plugins:
+        description: '🧩 额外插件 (空格分隔)'
+        required: false
+        default: ''
+
+env:
+  TZ: Asia/Shanghai
+
+permissions:
+  contents: write
+  actions: write  # 必须开启此权限以删除旧缓存
+
+jobs:
+  # 1. 预处理：确定执行设备名单
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      devices: ${{ steps.set-matrix.outputs.devices }}
+    steps:
+      - id: set-matrix
+        run: |
+          if [ "${{ github.event.inputs.build_parallel }}" = "true" ]; then
+            echo 'devices=["nn6000-v2", "re-ss-01"]' >> $GITHUB_OUTPUT
+          else
+            echo 'devices=["${{ github.event.inputs.single_device }}"]' >> $GITHUB_OUTPUT
+          fi
+
+  # 2. 编译作业
+  build:
+    needs: setup
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        device: ${{ fromJson(needs.setup.outputs.devices) }}
+
+    steps:
+    - name: Checkout Public Source
+      run: |
+        git clone --depth 1 -b ${{ github.event.inputs.repo_branch }} ${{ github.event.inputs.repo_url }} openwrt
+
+    - name: Checkout Private Tools
+      # 仅当源码地址不包含你的用户名时，才拉取 tools 分支进行注入
+      if: "!contains(github.event.inputs.repo_url, 'sora-shao')"
+      uses: actions/checkout@v4
+      with:
+        repository: sora-shao/openwrt-private
+        token: ${{ secrets.MY_PRIVATE_REPO_TOKEN }}
+        ref: tools
+        path: my_openwrt_custom
+
+    - name: Initialization environment
+      run: |
+        sudo -E apt-get -qq update
+        sudo -E apt-get -qq install build-essential clang flex bison g++ gawk gcc-multilib g++-multilib \
+        gettext git libncurses5-dev libssl-dev python3-setuptools swig zlib1g-dev libelf-dev \
+        unzip zlib1g-dev file python3 python3-pip rsync subversion wget bzip2 patch \
+        libncursesw5-dev libsqlite3-dev libxml2-dev libxslt1-dev zlib1g-dev libffi-dev \
+        libc6-dev-i386 lib32z1-dev lib32ncurses-dev lib32stdc++6 \
+        antlr3 gperf genisoimage p7zip p7zip-full rename qemu-utils rsync proxychains-ng tree
+        sudo timedatectl set-timezone "$TZ"
+
+    - name: Cache Tools & DL
+      uses: actions/cache@v4
+      with:
+        path: |
+          openwrt/dl
+          openwrt/staging_dir
+          openwrt/toolchain
+        # 使用 run_id 确保每次都会生成新缓存
+        key: ${{ runner.os }}-openwrt-${{ matrix.device }}-${{ github.run_id }}
+        # 恢复时匹配该设备最新的一份
+        restore-keys: |
+          ${{ runner.os }}-openwrt-${{ matrix.device }}-
+
+    - name: Run Sync Script & Load Config
+      run: |
+        # 1. 如果存在工具库，运行注入脚本
+        if [ -d "my_openwrt_custom" ]; then
+          chmod +x my_openwrt_custom/sync.sh
+          ./my_openwrt_custom/sync.sh "$GITHUB_WORKSPACE/openwrt"
+          # 复制对应的种子配置
+          cp "my_openwrt_custom/.config-${{ matrix.device }}" "openwrt/.config"
+        else
+          # 如果是私有库，直接找源码里的配置
+          cp "openwrt/.config-${{ matrix.device }}" "openwrt/.config" || true
+        fi
+
+    - name: Update & Install Feeds
+      run: |
+        cd openwrt
+        ./scripts/feeds update -a
+        ./scripts/feeds install -a
+
+    - name: Load Extra Plugins & Defconfig
+      run: |
+        cd openwrt
+        PLUGINS="${{ github.event.inputs.extra_plugins }}"
+        if [ -n "$PLUGINS" ]; then
+          for plugin in $PLUGINS; do
+            echo "CONFIG_PACKAGE_$plugin=y" >> .config
+          done
+        fi
+        make defconfig
+
+        chmod +x package/base-files/files/etc/uci-defaults/*
+
+        echo "--------------------------------------------------------"
+        echo "统计: 当前配置中 kmod 编译(y)数量: $(grep 'kmod' .config | grep '=y' | wc -l) 编译(m)数量: $(grep 'kmod' .config | grep '=m' | wc -l)"
+        echo "--------------------------------------------------------"
+        grep luci .config |grep =y
+
+    - name: Download package
+      run: |
+        cd openwrt
+        make download -j16
+        find dl -size -1024c -exec rm -f {} \;
+
+    - name: Compile the firmware
+      run: |
+        cd openwrt
+        make -j$(($(nproc) + 1)) || make -j1 V=s
+
+    - name: Process Artifacts
+      id: organize
+      if: success()
+      run: |
+        mkdir -p ./output/release_files
+        # 适配 qualcommax 路径
+        find openwrt/bin/targets/qualcommax/ipq60xx/ -type f \( -name "*factory*" -o -name "*sysupgrade*" \) -exec cp {} ./output/release_files/ \;
+        echo "release_name=${{ matrix.device }}-$(date +'%Y-%m-%d-%H%M')" >> $GITHUB_OUTPUT
+        echo "status=success" >> $GITHUB_OUTPUT
+
+    - name: Upload to Release
+      uses: softprops/action-gh-release@v2
+      if: steps.organize.outputs.status == 'success'
+      with:
+        tag_name: ${{ steps.organize.outputs.release_name }}
+        name: ${{ steps.organize.outputs.release_name }}
+        files: ./output/release_files/*
+        body: |
+          设备型号: ${{ matrix.device }}
+          源码地址: ${{ github.event.inputs.repo_url }}
+          额外插件: ${{ github.event.inputs.extra_plugins || '无' }}
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Delete Old Cache
+      # 编译成功后，删除该设备旧的缓存，只保留本次生成的最新缓存
+      if: success()
+      run: |
+        echo "🧹 清理 ${{ matrix.device }} 的旧缓存..."
+        gh cache list --limit 100 --ref ${{ github.ref }} | grep "${{ matrix.device }}" | cut -f 1 | xargs -I {} gh cache delete {} || true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Delete Old Releases
+      uses: dev-drprasad/delete-older-releases@v0.3.0
+      with:
+        keep_latest: 10
+        delete_tags: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

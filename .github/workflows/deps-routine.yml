@@ -1,0 +1,65 @@
+name: deps-routine
+
+on:
+        #schedule:
+          #  - cron: '0 20 * * 0' # 每周日北京时间凌晨 4 点运行
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update-assets:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # 获取完整历史以确保分支识别准确
+
+      - name: Sync and Clean
+        run: |
+          echo "🛠️ 开始同步 nikki 插件源码..."
+          
+          # 1. 清理旧目录
+          rm -rf package/nikki
+          
+          # 2. 克隆最新源码到临时目录
+          git clone --depth 1 https://github.com/nikkinikki-org/OpenWrt-nikki.git temp_nikki
+          
+          # 3. 彻底删除临时目录中的所有 README 文件
+          find temp_nikki -name "README*" -delete
+          
+          # 4. 移动清理后的文件并移除 Git 元数据
+          mkdir -p package/nikki
+          cp -r temp_nikki/* package/nikki/
+          rm -rf temp_nikki
+          
+          # 确保没有残留的 .git 文件夹影响主仓库
+          find package/nikki -name ".git" -type d -exec rm -rf {} +
+          echo "✅ 同步与清理完成"
+
+      - name: Push Updates
+        run: |
+          # 配置 Git 机器人信息
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "github-actions[bot]"
+          
+          # 1. 动态获取当前分支名 (例如 openwrt-v25.12.1)
+          CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+          echo "🔹 当前操作分支: $CURRENT_BRANCH"
+          
+          # 2. 暂存更改
+          git add package/nikki
+          
+          # 3. 检查是否有变动
+          if git diff --staged --quiet; then
+            echo "✅ 没有检测到任何源码变动，跳过推送。"
+          else
+            echo "📝 检测到变动，正在提交..."
+            git commit -m "chore: routine update of nikki assets [skip ci]"
+            
+            # 4. 动态推送到当前分支
+            echo "🚀 正在推送到 origin/$CURRENT_BRANCH..."
+            git push origin HEAD:"$CURRENT_BRANCH"
+          fi
