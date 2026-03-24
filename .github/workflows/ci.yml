@@ -90,7 +90,6 @@ jobs:
       uses: actions/cache@v4
       with:
         path: |
-          openwrt/dl
           openwrt/staging_dir
           openwrt/toolchain
         # 使用 run_id 确保每次都会生成新缓存
