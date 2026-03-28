@@ -168,19 +168,28 @@ jobs:
         cd openwrt
         if [ -f ".config-${{ matrix.device }}" ]; then
           cp ".config-${{ matrix.device }}" .config
+          echo "✅ 已成功加载 ${{ matrix.device }} 的种子配置 (.config-${{ matrix.device }})"
         else
-          echo "❌ .config-${{ matrix.device }} 不存在！"
+          echo "❌ 错误: .config-${{ matrix.device }} 不存在！"
           exit 1
         fi
-        
         PLUGINS="${{ github.event.inputs.extra_plugins }}"
         if [ -n "$PLUGINS" ]; then
+          echo "🔧 发现额外插件请求: $PLUGINS"
           for plugin in $PLUGINS; do
             echo "CONFIG_PACKAGE_$plugin=y" >> .config
           done
+          make defconfig
+        else
+          make defconfig
         fi
-        make defconfig
+        
         chmod +x package/base-files/files/etc/uci-defaults/*
+        
+        echo "--------------------------------------------------------"
+        echo "统计: 当前配置中 kmod 编译(y)数量: $(grep 'kmod' .config | grep '=y' | wc -l) 编译(m)数量: $(grep 'kmod' .config | grep '=m' | wc -l)"
+        echo "--------------------------------------------------------"
+        grep luci .config |grep =y
 
     - name: Download package
       run: |
