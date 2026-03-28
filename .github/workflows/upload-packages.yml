@@ -6,6 +6,7 @@ on:
       release_name:
         description: '🏷️ 输入要下载的 Release 名称 (Tag)'
         required: true
+        default: ''
       target_repo:
         description: '🌐 目标上传仓库地址'
         required: true
@@ -18,73 +19,84 @@ jobs:
   update-process:
     runs-on: ubuntu-latest
     steps:
+      # 1. 核心修复：检出仓库，提供 .git 目录供 gh 命令识别
+      - name: Checkout Current Repo
+        uses: actions/checkout@v4
+
       - name: Download Package from Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # 1. 自动定位包含 package 字符串的 tgz 文件
-          ASSET_NAME=$(gh release view "${{ github.event.inputs.release_name }}" --json assets -q '.assets[] | select(.name | contains("package")) | select(.name | endswith(".tgz")) | .name' | head -n 1)
+          RELEASE_TAG="${{ github.event.inputs.release_name }}"
+          
+          # 2. 自动定位包含 package 字符串的 tgz 文件
+          echo "🔍 正在查找 Release [$RELEASE_TAG] 中的资产..."
+          ASSET_NAME=$(gh release view "$RELEASE_TAG" --json assets -q '.assets[] | select(.name | contains("package")) | select(.name | endswith(".tgz")) | .name' | head -n 1)
           
           if [ -z "$ASSET_NAME" ]; then
-            echo "❌ 错误: 在 Release [${{ github.event.inputs.release_name }}] 中未找到 package 压缩包"
+            echo "❌ 错误: 在 Release [$RELEASE_TAG] 中未找到 package 压缩包"
             exit 1
           fi
           
-          echo "📥 正在下载: $ASSET_NAME"
-          gh release download "${{ github.event.inputs.release_name }}" -p "$ASSET_NAME"
+          echo "📥 正在下载资产: $ASSET_NAME"
+          gh release download "$RELEASE_TAG" -p "$ASSET_NAME"
           
-          # 2. 解压到临时目录
+          # 3. 解压处理
           mkdir -p raw_packages
           tar -zxf "$ASSET_NAME" -C raw_packages
-          # 提取解压后的 packages 文件夹内容到统一位置
+          
+          # 提取内容到 final_content 文件夹
           mkdir -p final_content
-          cp -rf raw_packages/packages/* final_content/
+          # 检查解压后是否存在 packages 目录（对应你之前的 tar 压缩逻辑）
+          if [ -d "raw_packages/packages" ]; then
+            cp -rf raw_packages/packages/* final_content/
+          else
+            cp -rf raw_packages/* final_content/
+          fi
 
       - name: Smart Git Sync
         env:
           MY_TOKEN: ${{ secrets.MY_PRIVATE_REPO_TOKEN }}
         run: |
           TARGET_URL="${{ github.event.inputs.target_repo }}"
-          # 构造带有 Token 的认证 URL (处理 https://)
+          # 注入 Token
           AUTH_URL=$(echo "$TARGET_URL" | sed "s|https://|https://sora-shao:${MY_TOKEN}@|")
           
-          # 3. 检测远程仓库是否为空
-          # 如果 ls-remote 返回空，说明是空仓库
+          # 4. 检测远程仓库状态
+          # ls-remote 如果返回 0 行，说明是空仓库
           IS_EMPTY=$(git ls-remote "$AUTH_URL" | wc -l)
-          
-          mkdir -p work_dir
-          cp -rf final_content/* work_dir/
-          cd work_dir
           
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
           if [ "$IS_EMPTY" -eq 0 ]; then
-            echo "⚠️ 检测到目标仓库为空，执行 git init 流程..."
+            echo "⚠️ 目标仓库为空，执行初始化推送..."
+            mkdir -p init_repo
+            cp -rf final_content/* init_repo/
+            cd init_repo
             git init
             git remote add origin "$AUTH_URL"
-            git add .
             git branch -M main
-            git commit -m "Initial commit: Packages from ${{ github.event.inputs.release_name }}"
+            git add .
+            git commit -m "Initial packages from ${{ github.event.inputs.release_name }}"
             git push -u origin main
           else
-            echo "✅ 检测到目标仓库已有内容，执行同步流程..."
-            cd ..
-            rm -rf work_dir
-            # 使用 checkout 逻辑或直接 clone
+            echo "✅ 目标仓库已有内容，执行同步更新..."
+            # 这里的 sync_repo 目录不能在 init_repo 内部
+            cd $GITHUB_WORKSPACE
             git clone "$AUTH_URL" sync_repo
             cd sync_repo
             
-            # 清理旧文件并存入新文件 (保持仓库整洁)
-            rm -rf ./*
+            # 清理旧文件，确保仓库内容与当前 Release 完全一致
+            # 注意保留 .git 目录
+            find . -maxdepth 1 ! -name ".git" ! -name "." -exec rm -rf {} +
             cp -rf ../final_content/* ./
             
             git add .
-            # 检查是否有文件变动
             if git diff --staged --quiet; then
-              echo "☕ 内容无变化，无需上传。"
+              echo "☕ 文件内容无变化，跳过 Push。"
             else
-              git commit -m "Update: Packages from ${{ github.event.inputs.release_name }}"
+              git commit -m "Update packages from ${{ github.event.inputs.release_name }}"
               git push origin main
             fi
           fi
