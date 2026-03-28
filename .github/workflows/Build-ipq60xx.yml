@@ -161,6 +161,7 @@ jobs:
         if [[ ! "${{ github.event.inputs.repo_url }}" == *"immortalwrt"* ]]; then
           [ -f "init.sh" ] && bash init.sh "${{ github.event.inputs.luci_version }}" || echo "Skip init.sh"
         fi
+        wc -l feeds/luci/modules/luci-base/root/usr/share/rpcd/ucode/luci
         ./scripts/feeds install -a
 
     - name: Load Device Config
