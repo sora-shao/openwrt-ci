@@ -146,23 +146,38 @@ jobs:
         wc -l feeds/luci/modules/luci-base/root/usr/share/rpcd/ucode/luci
         ./scripts/feeds install -a
 
-    - name: Load Extra Plugins & Defconfig
+    - name: Load Device Config
       run: |
-        cd openwrt
+        # --- 核心修正：直接使用 matrix.device (此时为 nn6000-v2 或 re-ss-01) 匹配文件名 ---
+        # 1. 复制基础种子配置
+        if [ -f ".config-${{ matrix.device }}" ]; then
+          cp ".config-${{ matrix.device }}" .config
+          echo "✅ 已成功加载 ${{ matrix.device }} 的种子配置 (.config-${{ matrix.device }})"
+        else
+          echo "❌ 错误: .config-${{ matrix.device }} 不存在！"
+          exit 1
+        fi
+        
+        # 2. 注入额外插件并判断编译逻辑
         PLUGINS="${{ github.event.inputs.extra_plugins }}"
         if [ -n "$PLUGINS" ]; then
+          echo "🔧 发现额外插件请求: $PLUGINS"
           for plugin in $PLUGINS; do
             echo "CONFIG_PACKAGE_$plugin=y" >> .config
           done
+          make defconfig
+        else
+          make defconfig
         fi
-        make defconfig
-
+        
+        # 3. 权限加固 (确保上传的分支权限不丢失)
         chmod +x package/base-files/files/etc/uci-defaults/*
-
+        
         echo "--------------------------------------------------------"
         echo "统计: 当前配置中 kmod 编译(y)数量: $(grep 'kmod' .config | grep '=y' | wc -l) 编译(m)数量: $(grep 'kmod' .config | grep '=m' | wc -l)"
         echo "--------------------------------------------------------"
         grep luci .config |grep =y
+
 
     - name: Download package
       run: |
