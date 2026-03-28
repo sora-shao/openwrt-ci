@@ -212,6 +212,7 @@ jobs:
         body: |
           设备型号: ${{ matrix.device }}
           源码地址: ${{ github.event.inputs.repo_url }}
+          源码分支：${{ github.event.inputs.repo_branch }}
           额外插件: ${{ github.event.inputs.extra_plugins || '无' }}
         prerelease: false
       env:
