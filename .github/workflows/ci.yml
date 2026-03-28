@@ -11,6 +11,11 @@ on:
         description: '🌿 源码分支'
         required: true
         default: 'main'
+      use_cache:
+        description: '💾 使用编译缓存 (提升速度)'
+        required: false
+        type: boolean
+        default: false
       build_parallel:
         description: '🚀 开启并行编译 (同时跑两个设备)'
         required: false
@@ -33,23 +38,32 @@ on:
         required: false
         default: ''
 
-
 env:
   TZ: Asia/Shanghai
 
 permissions:
   contents: write
-  actions: write  # 必须开启此权限以删除旧缓存
+  actions: write 
 
 jobs:
-  # 1. 预处理：确定执行设备名单
+  # 1. 预处理
   setup:
     runs-on: ubuntu-latest
     outputs:
       devices: ${{ steps.set-matrix.outputs.devices }}
+      source_key: ${{ steps.set-matrix.outputs.source_key }}
+      repo_name: ${{ steps.set-matrix.outputs.repo_name }}
     steps:
       - id: set-matrix
         run: |
+          # 提取源码仓库名
+          REPO_NAME=$(echo "${{ github.event.inputs.repo_url }}" | sed 's|.*/||' | sed 's|\.git$||')
+          echo "repo_name=$REPO_NAME" >> $GITHUB_OUTPUT
+          
+          # 生成源码唯一标识 (URL + Branch 的 MD5)
+          SRC_HASH=$(echo -n "${{ github.event.inputs.repo_url }}-${{ github.event.inputs.repo_branch }}" | md5sum | cut -d' ' -f1)
+          echo "source_key=$SRC_HASH" >> $GITHUB_OUTPUT
+          
           if [ "${{ github.event.inputs.build_parallel }}" = "true" ]; then
             echo 'devices=["nn6000-v2", "re-ss-01"]' >> $GITHUB_OUTPUT
           else
@@ -70,8 +84,6 @@ jobs:
       run: |
         REPO_URL="${{ github.event.inputs.repo_url }}"
         REPO_BRANCH="${{ github.event.inputs.repo_branch }}"
-        
-        # 判断是否为私有仓库 (包含 sora-shao)
         if [[ "$REPO_URL" == *"sora-shao"* ]]; then
           AUTH_URL=$(echo "$REPO_URL" | sed "s|https://github.com/|https://sora-shao:${{ secrets.MY_PRIVATE_REPO_TOKEN }}@github.com/|g")
           git clone --depth 1 -b "$REPO_BRANCH" "$AUTH_URL" openwrt
@@ -80,7 +92,6 @@ jobs:
         fi
 
     - name: Checkout Private Tools
-      # 仅当源码地址不包含你的用户名时，才拉取 tools 分支进行注入
       if: "!contains(github.event.inputs.repo_url, 'sora-shao')"
       uses: actions/checkout@v4
       with:
@@ -96,7 +107,6 @@ jobs:
         sudo apt-get -y purge azure-cli* docker* ghc* zulu* llvm* firefox google* dotnet* powershell* openjdk* mysql* php*
         sudo apt-get -y autoremove --purge
         sudo apt-get clean
-        df -Th
 
     - name: Initialization environment
       run: |
@@ -110,28 +120,37 @@ jobs:
         antlr3 gperf genisoimage p7zip p7zip-full rename qemu-utils rsync proxychains-ng
         sudo timedatectl set-timezone "$TZ"
 
+    - name: Show Build Info
+      run: |
+        echo "========================================================="
+        echo "🚀 编译信息确认"
+        echo "========================================================="
+        echo "🌐 源码地址: ${{ github.event.inputs.repo_url }}"
+        echo "📦 源码仓库: ${{ needs.setup.outputs.repo_name }}"
+        echo "🌿 源码分支: ${{ github.event.inputs.repo_branch }}"
+        echo "📱 目标机型: ${{ matrix.device }}"
+        echo "🧩 额外插件: ${{ github.event.inputs.extra_plugins || '无' }}"
+        echo "💾 开启缓存: ${{ github.event.inputs.use_cache }}"
+        echo "========================================================="
+
     - name: Cache Tools & DL
+      if: github.event.inputs.use_cache == 'true'
       uses: actions/cache@v4
       with:
         path: |
           openwrt/staging_dir
           openwrt/toolchain
-        # 使用 run_id 确保每次都会生成新缓存
-        key: ${{ runner.os }}-openwrt-${{ matrix.device }}-${{ github.run_id }}
-        # 恢复时匹配该设备最新的一份
+          openwrt/dl
+        key: ${{ runner.os }}-openwrt-${{ matrix.device }}-${{ needs.setup.outputs.source_key }}-${{ github.run_id }}
         restore-keys: |
-          ${{ runner.os }}-openwrt-${{ matrix.device }}-
+          ${{ runner.os }}-openwrt-${{ matrix.device }}-${{ needs.setup.outputs.source_key }}-
 
     - name: Run Sync Script & Load Config
       run: |
-        # 1. 如果存在工具库，运行注入脚本
         if [ -d "my_openwrt_custom" ]; then
           chmod +x my_openwrt_custom/sync.sh
           ./my_openwrt_custom/sync.sh "$GITHUB_WORKSPACE/openwrt"
-          # 复制对应的种子配置
-          # cp "my_openwrt_custom/.config-${{ matrix.device }}" "openwrt/.config"
         else
-          # 如果是私有库，直接找源码里的配置
           cp "openwrt/.config-${{ matrix.device }}" "openwrt/.config" || true
         fi
 
@@ -140,45 +159,29 @@ jobs:
         cd openwrt
         ./scripts/feeds update -a
         rm -rf feeds/luci/modules/luci-mod-status
-        if [[ ! "$REPO_URL" == *"immortalwrt"* ]]; then
-          [ -f "init.sh" ] && bash init.sh "$luci_version" || echo "未找到 init.sh，跳过。"
+        if [[ ! "${{ github.event.inputs.repo_url }}" == *"immortalwrt"* ]]; then
+          [ -f "init.sh" ] && bash init.sh "${{ github.event.inputs.luci_version }}" || echo "Skip init.sh"
         fi
-        wc -l feeds/luci/modules/luci-base/root/usr/share/rpcd/ucode/luci
         ./scripts/feeds install -a
 
     - name: Load Device Config
       run: |
         cd openwrt
-        # --- 核心修正：直接使用 matrix.device (此时为 nn6000-v2 或 re-ss-01) 匹配文件名 ---
-        # 1. 复制基础种子配置
         if [ -f ".config-${{ matrix.device }}" ]; then
           cp ".config-${{ matrix.device }}" .config
-          echo "✅ 已成功加载 ${{ matrix.device }} 的种子配置 (.config-${{ matrix.device }})"
         else
-          echo "❌ 错误: .config-${{ matrix.device }} 不存在！"
+          echo "❌ .config-${{ matrix.device }} 不存在！"
           exit 1
         fi
         
-        # 2. 注入额外插件并判断编译逻辑
         PLUGINS="${{ github.event.inputs.extra_plugins }}"
         if [ -n "$PLUGINS" ]; then
-          echo "🔧 发现额外插件请求: $PLUGINS"
           for plugin in $PLUGINS; do
             echo "CONFIG_PACKAGE_$plugin=y" >> .config
           done
-          make defconfig
-        else
-          make defconfig
         fi
-        
-        # 3. 权限加固 (确保上传的分支权限不丢失)
+        make defconfig
         chmod +x package/base-files/files/etc/uci-defaults/*
-        
-        echo "--------------------------------------------------------"
-        echo "统计: 当前配置中 kmod 编译(y)数量: $(grep 'kmod' .config | grep '=y' | wc -l) 编译(m)数量: $(grep 'kmod' .config | grep '=m' | wc -l)"
-        echo "--------------------------------------------------------"
-        grep luci .config |grep =y
-
 
     - name: Download package
       run: |
@@ -195,35 +198,63 @@ jobs:
       id: organize
       if: success()
       run: |
-        mkdir -p ./output/release_files
-        # 适配 qualcommax 路径
-        find openwrt/bin/targets/qualcommax/ipq60xx/ -type f \( -name "*factory*" -o -name "*sysupgrade*" \) -exec cp {} ./output/release_files/ \;
-        tar -zcvf ./output/release_files/packages-${{ matrix.device }}.tgz -C openwrt/bin/targets/qualcommax/ipq60xx/ packages/
-        echo "release_name=${{ matrix.device }}-$(date +'%Y-%m-%d-%H%M')" >> $GITHUB_OUTPUT
+        mkdir -p ./output/local_only
+        mkdir -p ./output/private_all
+        
+        PKG_FILE="packages-${{ matrix.device }}.tgz"
+        tar -zcvf "./output/$PKG_FILE" -C openwrt/bin/targets/qualcommax/ipq60xx/ packages/
+        cp "./output/$PKG_FILE" ./output/local_only/
+        cp "./output/$PKG_FILE" ./output/private_all/
+        
+        find openwrt/bin/targets/qualcommax/ipq60xx/ -type f \( -name "*factory*" -o -name "*sysupgrade*" \) -exec cp {} ./output/private_all/ \;
+        
+        TAG_NAME="${{ needs.setup.outputs.repo_name }}-${{ github.event.inputs.repo_branch }}-${{ matrix.device }}-$(date +'%Y-%m-%d-%H%M')"
+        echo "release_name=$TAG_NAME" >> $GITHUB_OUTPUT
         echo "status=success" >> $GITHUB_OUTPUT
 
-    - name: Upload to Release
+    - name: Upload to Local Repo (Packages Only)
       uses: softprops/action-gh-release@v2
       if: steps.organize.outputs.status == 'success'
       with:
         tag_name: ${{ steps.organize.outputs.release_name }}
         name: ${{ steps.organize.outputs.release_name }}
-        files: ./output/release_files/*
+        files: ./output/local_only/*
         body: |
-          设备型号: ${{ matrix.device }}
-          源码地址: ${{ github.event.inputs.repo_url }}
-          源码分支：${{ github.event.inputs.repo_branch }}
-          额外插件: ${{ github.event.inputs.extra_plugins || '无' }}
+          🌐 源码地址: ${{ github.event.inputs.repo_url }}
+          📦 源码仓库: ${{ needs.setup.outputs.repo_name }}
+          🌿 源码分支: ${{ github.event.inputs.repo_branch }}
+          📱 目标机型: ${{ matrix.device }}
+          🧩 额外插件: ${{ github.event.inputs.extra_plugins || '无' }}
+          ---
+          本地仓库产物：仅包含软件包 (Packages)
         prerelease: false
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+    - name: Upload to openwrt-private (Firmware + Packages)
+      uses: softprops/action-gh-release@v2
+      if: steps.organize.outputs.status == 'success'
+      with:
+        repository: sora-shao/openwrt-private
+        token: ${{ secrets.MY_PRIVATE_REPO_TOKEN }}
+        tag_name: ${{ steps.organize.outputs.release_name }}
+        name: ${{ steps.organize.outputs.release_name }}
+        files: ./output/private_all/*
+        body: |
+          🌐 源码地址: ${{ github.event.inputs.repo_url }}
+          📦 源码仓库: ${{ needs.setup.outputs.repo_name }}
+          🌿 源码分支: ${{ github.event.inputs.repo_branch }}
+          📱 目标机型: ${{ matrix.device }}
+          🧩 额外插件: ${{ github.event.inputs.extra_plugins || '无' }}
+          ---
+          私人仓库全量产物：固件 + 软件包
+        prerelease: false
+
     - name: Delete Old Cache
-      # 编译成功后，删除该设备旧的缓存，只保留本次生成的最新缓存
-      if: success()
+      if: success() && github.event.inputs.use_cache == 'true'
       run: |
-        echo "🧹 清理 ${{ matrix.device }} 的旧缓存..."
-        gh cache list --limit 100 --ref ${{ github.ref }} | grep "${{ matrix.device }}" | cut -f 1 | xargs -I {} gh cache delete {} || true
+        echo "🧹 清理旧缓存 (Source: ${{ needs.setup.outputs.source_key }})"
+        gh cache list --limit 100 --ref ${{ github.ref }} --key "${{ runner.os }}-openwrt-${{ matrix.device }}-${{ needs.setup.outputs.source_key }}-" | cut -f 1 | xargs -I {} gh cache delete {} || true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
