@@ -213,7 +213,7 @@ jobs:
         PKG_FILE="packages-${{ matrix.device }}.tgz"
         rm -rf openwrt/bin/targets/qualcommax/ipq60xx/packages/base-file*
         cd openwrt
-        make package/index
+        make package/index || echo 1
         tar -zcvf "./output/$PKG_FILE" -C openwrt/bin/targets/qualcommax/ipq60xx/ packages/
         cp "./output/$PKG_FILE" ./output/local_only/
         cp "./output/$PKG_FILE" ./output/private_all/
