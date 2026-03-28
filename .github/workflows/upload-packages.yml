@@ -6,7 +6,7 @@ on:
       release_name:
         description: '🏷️ 输入要下载的 Release 名称 (Tag)'
         required: true
-        default: 'test'
+        default: ''
       target_repo:
         description: '🌐 目标上传仓库地址'
         required: true
