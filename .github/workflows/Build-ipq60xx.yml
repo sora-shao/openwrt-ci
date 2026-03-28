@@ -211,6 +211,8 @@ jobs:
         mkdir -p ./output/private_all
         
         PKG_FILE="packages-${{ matrix.device }}.tgz"
+        rm -rf openwrt/bin/targets/qualcommax/ipq60xx/packages/base-file*
+        make package/index
         tar -zcvf "./output/$PKG_FILE" -C openwrt/bin/targets/qualcommax/ipq60xx/ packages/
         cp "./output/$PKG_FILE" ./output/local_only/
         cp "./output/$PKG_FILE" ./output/private_all/
