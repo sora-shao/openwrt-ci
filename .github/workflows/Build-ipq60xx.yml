@@ -157,11 +157,11 @@ jobs:
       run: |
         cd openwrt
         ./scripts/feeds update -a
-        rm -rf feeds/luci/modules/luci-mod-status
         if [[ ! "${{ github.event.inputs.repo_url }}" == *"immortalwrt"* ]]; then
+          rm -rf feeds/luci/modules/luci-mod-status
           [ -f "init.sh" ] && bash init.sh "${{ github.event.inputs.luci_version }}" || echo "Skip init.sh"
+          wc -l feeds/luci/modules/luci-base/root/usr/share/rpcd/ucode/luci
         fi
-        wc -l feeds/luci/modules/luci-base/root/usr/share/rpcd/ucode/luci
         ./scripts/feeds install -a
 
     - name: Load Device Config
