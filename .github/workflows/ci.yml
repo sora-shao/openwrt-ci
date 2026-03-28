@@ -148,6 +148,7 @@ jobs:
 
     - name: Load Device Config
       run: |
+        cd openwrt
         # --- 核心修正：直接使用 matrix.device (此时为 nn6000-v2 或 re-ss-01) 匹配文件名 ---
         # 1. 复制基础种子配置
         if [ -f ".config-${{ matrix.device }}" ]; then
