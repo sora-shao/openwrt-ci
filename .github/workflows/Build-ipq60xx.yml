@@ -139,7 +139,7 @@ jobs:
       with:
         path: |
           openwrt/staging_dir
-          openwrt/toolchain
+          # openwrt/toolchain
         key: ${{ runner.os }}-openwrt-${{ matrix.device }}-${{ needs.setup.outputs.source_key }}-${{ github.run_id }}
         restore-keys: |
           ${{ runner.os }}-openwrt-${{ matrix.device }}-${{ needs.setup.outputs.source_key }}-
