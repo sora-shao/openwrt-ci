@@ -3,7 +3,7 @@ name: Auto-Trigger OpenWrt Build
 on:
   schedule:
     - cron: '0 20 * * *'  
-  workflow_dispatch:      
+  workflow_dispatch:
 
 jobs:
   check-and-dispatch:
@@ -13,6 +13,9 @@ jobs:
       contents: read
 
     steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
       - name: Get Latest Tag from OpenWrt
         id: get_tag
         run: |
@@ -50,7 +53,6 @@ jobs:
             echo "🚀 检测到新版本，正在推送到 Build-ipq60xx..."
             
             gh workflow run Build-ipq60xx \
-              --ref ${{ github.ref_name }} \
               -f repo_url="https://github.com/openwrt/openwrt" \
               -f repo_branch="$LATEST_TAG" \
               -f use_cache="false" \
