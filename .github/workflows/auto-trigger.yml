@@ -2,7 +2,7 @@ name: Auto-Trigger OpenWrt Build
 
 on:
   schedule:
-    - cron: '0 16,20,0,4,8,12 * * *' 
+    - cron: '30 */4 * * *' 
   workflow_dispatch:
 
 jobs:
