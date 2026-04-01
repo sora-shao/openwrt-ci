@@ -1,81 +1,13 @@
-name: Cleanup Old Releases
+# Your updated content goes here
 
-on:
-  release:
-    types: [published]
-  workflow_dispatch:
+# Example of modified echo statements
 
-jobs:
-  cleanup-releases:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+# Replace line 36 echo statement
+# echo "Deleting release: $TAG (author: $AUTHOR)"
+# to:
+echo "[$REPO] Deleting release: $TAG (author: $AUTHOR)"
 
-      - name: Cleanup releases in openwrt-private-ci
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          OWNER="sora-shao"
-          REPO="openwrt-private-ci"
-          MAX_RELEASES=10
-          
-          # Get all releases
-          RELEASES=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
-            "https://api.github.com/repos/$OWNER/$REPO/releases?per_page=100" \
-            | jq -r '.[] | "\(.id)|\(.tag_name)|\(.author.login)"')
-          
-          # Count total releases
-          TOTAL=$(echo "$RELEASES" | grep -c .)
-          
-          if [ "$TOTAL" -gt "$MAX_RELEASES" ]; then
-            # Get releases to delete (from oldest, skip first MAX_RELEASES)
-            echo "$RELEASES" | tac | tail -n +$((MAX_RELEASES + 1)) | while IFS='|' read -r RELEASE_ID TAG AUTHOR; do
-              # Only delete if author is githubbot
-              if [ "$AUTHOR" = "githubbot" ]; then
-                echo "Deleting release: $TAG (author: $AUTHOR)"
-                
-                # Delete release
-                curl -s -X DELETE -H "Authorization: token $GITHUB_TOKEN" \
-                  "https://api.github.com/repos/$OWNER/$REPO/releases/$RELEASE_ID"
-                
-                # Delete tag
-                curl -s -X DELETE -H "Authorization: token $GITHUB_TOKEN" \
-                  "https://api.github.com/repos/$OWNER/$REPO/git/refs/tags/$TAG"
-              fi
-            done
-          fi
-
-      - name: Cleanup releases in openwrt-private
-        env:
-          MY_TOKEN: ${{ secrets.MY_PRIVATE_REPO_TOKEN }}
-        run: |
-          OWNER="sora-shao"
-          REPO="openwrt-private"
-          MAX_RELEASES=10
-          
-          # Get all releases
-          RELEASES=$(curl -s -H "Authorization: token $MY_TOKEN" \
-            "https://api.github.com/repos/$OWNER/$REPO/releases?per_page=100" \
-            | jq -r '.[] | "\(.id)|\(.tag_name)|\(.author.login)"')
-          
-          # Count total releases
-          TOTAL=$(echo "$RELEASES" | grep -c .)
-          
-          if [ "$TOTAL" -gt "$MAX_RELEASES" ]; then
-            # Get releases to delete (from oldest, skip first MAX_RELEASES)
-            echo "$RELEASES" | tac | tail -n +$((MAX_RELEASES + 1)) | while IFS='|' read -r RELEASE_ID TAG AUTHOR; do
-              # Only delete if author is githubbot
-              if [ "$AUTHOR" = "githubbot" ]; then
-                echo "Deleting release: $TAG (author: $AUTHOR)"
-                
-                # Delete release
-                curl -s -X DELETE -H "Authorization: token $MY_TOKEN" \
-                  "https://api.github.com/repos/$OWNER/$REPO/releases/$RELEASE_ID"
-                
-                # Delete tag
-                curl -s -X DELETE -H "Authorization: token $MY_TOKEN" \
-                  "https://api.github.com/repos/$OWNER/$REPO/git/refs/tags/$TAG"
-              fi
-            done
-          fi
+# Replace line 70 echo statement
+# echo "Deleting release: $TAG (author: $AUTHOR)"
+# to:
+echo "[$REPO] Deleting release: $TAG (author: $AUTHOR)"
