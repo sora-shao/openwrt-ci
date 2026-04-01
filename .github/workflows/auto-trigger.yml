@@ -1,16 +1,41 @@
-# This workflow is triggered by a cron schedule
-
-name: Auto Trigger
-
+name: Auto-Trigger OpenWrt Build
 on:
   schedule:
-    - cron: '0 16,20,0,4,8,12 * * *'
+    - cron: '0 */4 * * *'
+  workflow_dispatch:
 
 jobs:
-  build:
+  check-and-dispatch:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Checkout Repository
         uses: actions/checkout@v2
-      - name: Run some commands
-        run: echo 'Running on schedule!'
+
+      - name: Get Latest Tag from OpenWrt
+        id: get_tag
+        run: |
+          # Command to get the latest tag
+          latest_tag=$(git describe --tags)
+          echo "::set-output name=tag::$latest_tag"
+
+      - name: Restore Last Processed Tag
+        id: restore_cache
+        run: |
+          # Command to restore the last processed tag if needed
+          if [ -f tag.cache ]; then
+            last_tag=$(cat tag.cache)
+            echo "Restored last tag: $last_tag"
+          fi
+
+      - name: Compare and Trigger Build
+        run: |
+          # Logic to compare the tags and trigger the build accordingly
+          if [ "$last_tag" != "$tag" ]; then
+            echo "Triggering build for new tag: $tag"
+            # Trigger build process here
+          fi
+
+      - name: Save Tag Cache
+        run: |
+          echo "$tag" > tag.cache
+          echo "Saved current tag to cache: $tag"
