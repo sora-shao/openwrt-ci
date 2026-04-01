@@ -1,74 +1,16 @@
-name: Auto-Trigger OpenWrt Build
+# This workflow is triggered by a cron schedule
+
+name: Auto Trigger
 
 on:
   schedule:
-    - cron: '0 */4 * * *'  
-  workflow_dispatch:
+    - cron: '0 16,20,0,4,8,12 * * *'
 
 jobs:
-  check-and-dispatch:
+  build:
     runs-on: ubuntu-latest
-    permissions:
-      actions: write
-      contents: read
-
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
-      - name: Get Latest Tag from OpenWrt
-        id: get_tag
-        run: |
-          LATEST_TAG=$(git ls-remote --tags https://github.com/openwrt/openwrt.git | \
-            grep -v "\^{}" | \
-            cut -f2 | \
-            sed 's|refs/tags/||' | \
-            sort -V | \
-            tail -n1)
-          
-          echo "latest_tag=$LATEST_TAG" >> $GITHUB_OUTPUT
-          echo "✅ 探测到 OpenWrt 最新 Tag: $LATEST_TAG"
-
-      - name: Restore Last Processed Tag
-        id: restore_cache
-        uses: actions/cache/restore@v4
-        with:
-          path: last_tag.txt
-          key: last-processed-tag-${{ steps.get_tag.outputs.latest_tag }}
-          restore-keys: |
-            last-processed-tag-
-
-      - name: Compare and Trigger Build
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          LATEST_TAG: ${{ steps.get_tag.outputs.latest_tag }}
-        run: |
-          LAST_TAG=""
-          [ -f last_tag.txt ] && LAST_TAG=$(cat last_tag.txt)
-          
-          echo "上次记录: ${LAST_TAG:-无}"
-          echo "当前最新: $LATEST_TAG"
-
-          if [ "$LATEST_TAG" != "$LAST_TAG" ]; then
-            echo "🚀 检测到新版本，正在推送到 Build-ipq60xx..."
-            
-            gh workflow run Build-ipq60xx \
-              -f repo_url="https://github.com/openwrt/openwrt" \
-              -f repo_branch="$LATEST_TAG" \
-              -f use_cache="false" \
-              -f build_parallel="true" \
-              -f single_device="nn6000-v2"
-            
-            echo "$LATEST_TAG" > last_tag.txt
-            echo "trigger_status=fired" >> $GITHUB_ENV
-          else
-            echo "☕ 源码暂无更新。"
-            echo "trigger_status=skipped" >> $GITHUB_ENV
-          fi
-
-      - name: Save Tag Cache
-        if: env.trigger_status == 'fired'
-        uses: actions/cache/save@v4
-        with:
-          path: last_tag.txt
-          key: last-processed-tag-${{ steps.get_tag.outputs.latest_tag }}
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Run some commands
+        run: echo 'Running on schedule!'
