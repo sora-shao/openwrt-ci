@@ -79,12 +79,12 @@ jobs:
             
             console.log(`🔍 开始清理私人仓库: ${owner}/${repo}`);
             
-            // 使用私人token创建octokit实例
+            // 使用私人token创建privateOctokit实例
             const { Octokit } = await import("@octokit/rest");
-            const octokit = new Octokit({ auth: privateToken });
+            const privateOctokit = new Octokit({ auth: privateToken });
             
             // 获取所有release
-            const releases = await octokit.rest.repos.listReleases({
+            const releases = await privateOctokit.rest.repos.listReleases({
               owner,
               repo,
               per_page: 100
@@ -107,14 +107,14 @@ jobs:
                   console.log(`⏳ 正在删除: ${release.tag_name}`);
                   
                   // 删除release
-                  await octokit.rest.repos.deleteRelease({
+                  await privateOctokit.rest.repos.deleteRelease({
                     owner,
                     repo,
                     release_id: release.id
                   });
                   
                   // 删除tag
-                  await octokit.rest.git.deleteRef({
+                  await privateOctokit.rest.git.deleteRef({
                     owner,
                     repo,
                     ref: `tags/${release.tag_name}`
@@ -135,4 +135,4 @@ jobs:
           echo "✅ Release清理任务完成！"
           echo "📋 清理规则："
           echo "  • 公开仓库: 保留最新10个github-actions[bot]发布的release"
-          echo "  • 私人仓库: 保留最新10个github-actions[bot]发布的release (排除sora-shao用户的release)"]
+          echo "  • 私人仓库: 保留最新10个github-actions[bot]发布的release (排除sora-shao用户的release)"
