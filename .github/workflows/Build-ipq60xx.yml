@@ -84,18 +84,18 @@ jobs:
       run: |
         REPO_URL="${{ github.event.inputs.repo_url }}"
         REPO_BRANCH="${{ github.event.inputs.repo_branch }}"
-        if [[ "$REPO_URL" == *"sora-shao"* ]]; then
-          AUTH_URL=$(echo "$REPO_URL" | sed "s|https://github.com/|https://sora-shao:${{ secrets.MY_PRIVATE_REPO_TOKEN }}@github.com/|g")
+        if [[ "$REPO_URL" == *"asuka6250"* ]]; then
+          AUTH_URL=$(echo "$REPO_URL" | sed "s|https://github.com/|https://asuka6250:${{ secrets.MY_PRIVATE_REPO_TOKEN }}@github.com/|g")
           git clone --depth 1 -b "$REPO_BRANCH" "$AUTH_URL" openwrt
         else
           git clone --depth 1 -b "$REPO_BRANCH" "$REPO_URL" openwrt
         fi
 
     - name: Checkout Private Tools
-      if: "!contains(github.event.inputs.repo_url, 'sora-shao')"
+      if: "!contains(github.event.inputs.repo_url, 'asuka6250')"
       uses: actions/checkout@v4
       with:
-        repository: sora-shao/openwrt-private
+        repository: asuka6250/openwrt-private
         token: ${{ secrets.MY_PRIVATE_REPO_TOKEN }}
         ref: tools
         path: my_openwrt_custom
@@ -246,7 +246,7 @@ jobs:
       uses: softprops/action-gh-release@v2
       if: steps.organize.outputs.status == 'success'
       with:
-        repository: sora-shao/openwrt-private
+        repository: asuka6250/openwrt-private
         token: ${{ secrets.MY_PRIVATE_REPO_TOKEN }}
         tag_name: ${{ steps.organize.outputs.release_name }}
         name: ${{ steps.organize.outputs.release_name }}
