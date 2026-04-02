@@ -1,6 +1,5 @@
 name: Cleanup Action Logs
 
-
 on:
   schedule:
     - cron: '0 16 * * *'
@@ -18,7 +17,17 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          echo "正在获取所有 Workflow 列表..."
+          echo "正在搜索并清理语法报错 (Invalid Workflow) 的日志..."
+          invalid_runs=$(gh api "repos/${{ github.repository }}/actions/runs?per_page=100" \
+            --jq '.workflow_runs[] | select(.status == "startup_failure") | .id')
+          
+          for run_id in $invalid_runs; do
+            run_name=$(gh api "repos/${{ github.repository }}/actions/runs/$run_id" --jq '.name')
+            echo "正在删除语法报错记录: $run_name (ID: $run_id)"
+            gh api -X DELETE "repos/${{ github.repository }}/actions/runs/$run_id" --silent
+          done
+
+          echo "正在获取所有有效 Workflow 列表..."
           workflows=$(gh api repos/${{ github.repository }}/actions/workflows | jq -r '.workflows[].id')
 
           for workflow_id in $workflows; do
@@ -27,8 +36,10 @@ jobs:
               | jq -r '.workflow_runs[] | select(.status != "in_progress") | .id')
 
             for run_id in $run_ids; do
-              echo "正在删除运行记录 ID: $run_id"
+              run_name=$(gh api "repos/${{ github.repository }}/actions/runs/$run_id" --jq '.name')
+              echo "正在删除运行记录: $run_name (ID: $run_id)"
               gh api -X DELETE "repos/${{ github.repository }}/actions/runs/$run_id" --silent
             done
           done
+          
           echo "清理完成！"
