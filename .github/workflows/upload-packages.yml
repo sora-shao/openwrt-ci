@@ -10,7 +10,7 @@ on:
       target_repo:
         description: '🌐 目标上传仓库地址'
         required: true
-        default: 'https://github.com/sora-shao/openwrt-kmods'
+        default: 'https://github.com/asuka6250/openwrt-kmods'
 
 env:
   TZ: Asia/Shanghai
@@ -57,7 +57,7 @@ jobs:
           git config --global init.defaultBranch main
 
           TARGET_URL="${{ github.event.inputs.target_repo }}"
-          AUTH_URL=$(echo "$TARGET_URL" | sed "s|https://|https://sora-shao:${MY_TOKEN}@|")
+          AUTH_URL=$(echo "$TARGET_URL" | sed "s|https://|https://asuka6250:${MY_TOKEN}@|")
           
           # 2. 检测远程仓库状态
           IS_EMPTY=$(git ls-remote "$AUTH_URL" | wc -l)
