@@ -166,7 +166,7 @@ jobs:
       run: |
         cd openwrt
         ./scripts/feeds update -a
-        if [[ ! "${{ github.event.inputs.repo_url }}" == *"immortalwrt"* ]]; then
+        if [[ ! "${{ github.event.inputs.repo_url }}" == *"immortalwrt"* && ! "${{ github.event.inputs.repo_url }}" == *"LiBwrt"* ]]; then
           rm -rf feeds/luci/modules/luci-mod-status
           [ -f "init.sh" ] && bash init.sh "${{ github.event.inputs.luci_version }}" || echo "Skip init.sh"
           wc -l feeds/luci/modules/luci-base/root/usr/share/rpcd/ucode/luci
