@@ -29,6 +29,11 @@ on:
         options:
           - 'nn6000-v2'
           - 're-ss-01'
+      selective_sync:
+        description: 'Mode1'
+        required: false
+        type: boolean
+        default: false
       extra_plugins:
         description: '🧩 额外插件 (空格分隔)'
         required: false
@@ -147,8 +152,12 @@ jobs:
     - name: Run Sync Script & Load Config
       run: |
         if [ -d "my_openwrt_custom" ]; then
-          chmod +x my_openwrt_custom/sync.sh
-          ./my_openwrt_custom/sync.sh "$GITHUB_WORKSPACE/openwrt"
+          SYNC_MODE=""
+          if [ "${{ github.event.inputs.selective_sync }}" == "true" ]; then
+            SYNC_MODE="1"
+          fi
+          echo "🚀 Running sync script with MODE: $SYNC_MODE"
+          ./my_openwrt_custom/sync.sh "$GITHUB_WORKSPACE/openwrt" "$SYNC_MODE"
         else
           cp "openwrt/.config-${{ matrix.device }}" "openwrt/.config" || true
         fi
