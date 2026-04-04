@@ -253,6 +253,14 @@ jobs:
         find openwrt/bin/targets/qualcommax/ipq60xx/ -type f \( -name "*factory*" -o -name "*sysupgrade*" \) -exec cp {} ./output/private_all/ \;
         
         TAG_NAME="${{ needs.setup.outputs.repo_name }}-${{ github.event.inputs.repo_branch }}-${{ matrix.device }}-$(date +'%Y-%m-%d-%H%M')"
+        BUILD_TIME=$(date +'%Y-%m-%d %H:%M:%S')
+        if [ "${{ github.event.inputs.target_sync }}" == "true" ]; then
+          SYNC_INFO="- 🔗 **同步源地址**: \`${{ github.event.inputs.source_code }}\` <br/> - 🌿 **同步源分支**: \`${{ github.event.inputs.source_branch }}\`"
+          echo "sync_info=$SYNC_INFO" >> $GITHUB_OUTPUT
+        else
+          echo "sync_info=" >> $GITHUB_OUTPUT
+        fi
+        echo "build_time=$BUILD_TIME" >> $GITHUB_OUTPUT
         echo "release_name=$TAG_NAME" >> $GITHUB_OUTPUT
         echo "status=success" >> $GITHUB_OUTPUT
 
@@ -272,13 +280,12 @@ jobs:
           
           ### ⚙️ 定制化参数
           - 🔄 **同步模式 (COPY_TARGET)**: `${{ github.event.inputs.selective_sync }}`
-          ${{ github.event.inputs.selective_sync == 'true' && format('- 🔗 **同步源地址**: {0}\n- 🌿 **同步源分支**: {1}', github.event.inputs.source_code, github.event.inputs.source_branch) || '' }}
-          - 🏮 **LuCI 版本 (Immortal)**: `${{ github.event.inputs.luci_version || '默认(25.12)' }}`
+          ${{ steps.organize.outputs.sync_info }}
           - 🧩 **额外插件**: `${{ github.event.inputs.extra_plugins || '无' }}`
           - 💾 **编译缓存**: `${{ github.event.inputs.use_cache }}`
           
           ---
-          🕒 *编译完成时间: $(date +'%Y-%m-%d %H:%M:%S')*
+          🕒 *编译完成时间: ${{ steps.organize.outputs.build_time }}*
           🚀 *由 GitHub Actions 自动化构建*
         prerelease: false
       env:
@@ -302,13 +309,13 @@ jobs:
           
           ### ⚙️ 定制化参数
           - 🔄 **同步模式 (COPY_TARGET)**: `${{ github.event.inputs.selective_sync }}`
-          ${{ github.event.inputs.selective_sync == 'true' && format('- 🔗 **同步源地址**: {0}\n- 🌿 **同步源分支**: {1}', github.event.inputs.source_code, github.event.inputs.source_branch) || '' }}
+          ${{ steps.organize.outputs.sync_info }}
           - 🏮 **LuCI 版本 (Immortal)**: `${{ github.event.inputs.luci_version || '默认(25.12)' }}`
           - 🧩 **额外插件**: `${{ github.event.inputs.extra_plugins || '无' }}`
           - 💾 **编译缓存**: `${{ github.event.inputs.use_cache }}`
           
           ---
-          🕒 *编译完成时间: $(date +'%Y-%m-%d %H:%M:%S')*
+          🕒 *编译完成时间: ${{ steps.organize.outputs.build_time }}*
           🚀 *由 GitHub Actions 自动化构建*
         prerelease: false
 
