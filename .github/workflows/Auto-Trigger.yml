@@ -59,6 +59,17 @@ jobs:
               -f use_cache="false" \
               -f build_parallel="true" \
               -f single_device="nn6000-v2"
+
+            echo "🔥 正在触发 NSS 专属并行编译 ..."
+            gh workflow run Build-ipq60xx \
+              -f repo_url="https://github.com/openwrt/openwrt" \
+              -f repo_branch="$LATEST_TAG" \
+              -f target_sync="true" \
+              -f enable_nss="true" \
+              -f build_parallel="true" \
+              -f source_code="https://github.com/LiBwrt/openwrt-6.x" \
+              -f source_branch="25.12-nss" \
+              -f single_device="nn6000-v2"
             
             echo "$LATEST_TAG" > last_tag.txt
             echo "trigger_status=fired" >> $GITHUB_ENV
