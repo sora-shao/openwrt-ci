@@ -20,6 +20,11 @@ on:
         required: false
         type: boolean
         default: false
+      enable_nss:
+        description: 'enable_nss'
+        required: false
+        type: boolean
+        default: false
       source_code:
         description: '🔗 同步源地址 (SOURCE_CODE)'
         required: false
@@ -148,6 +153,7 @@ jobs:
         echo "📱 目标机型: ${{ matrix.device }}"
         echo "---------------------------------------------------------"
         echo "🔄 同步模式 (COPY_TARGET): ${{ github.event.inputs.target_sync }}"
+        echo "🔛 NSS": ${{github.event.inputs.enable_nss}}
         if [ "${{ github.event.inputs.target_sync }}" == "true" ]; then
           echo "🔗 同步源地址: ${{ github.event.inputs.source_code }}"
           echo "🌿 同步源分支: ${{ github.event.inputs.source_branch }}"
@@ -189,6 +195,7 @@ jobs:
         COPY_TARGET: ${{ github.event.inputs.target_sync }}
         SOURCE_CODE: ${{ github.event.inputs.source_code }}
         SOURCE_BRANCH: ${{ github.event.inputs.source_branch }}
+        ENABLE_NSS: ${{github.event.inputs.enable_nss}}
       run: |
         cd openwrt
         ./scripts/feeds update -a
@@ -211,10 +218,8 @@ jobs:
           for plugin in $PLUGINS; do
             echo "CONFIG_PACKAGE_$plugin=y" >> .config
           done
-          make defconfig
-        else
-          make defconfig
         fi
+        make defconfig
         
         chmod +x package/base-files/files/etc/uci-defaults/*
         
@@ -283,6 +288,7 @@ jobs:
           ${{ steps.organize.outputs.sync_info }}
           - 🧩 **额外插件**: `${{ github.event.inputs.extra_plugins || '无' }}`
           - 💾 **编译缓存**: `${{ github.event.inputs.use_cache }}`
+          - 🔛 **NSS**: `${{github.event.inputs.enable_nss}}`
           
           ---
           🕒 *编译完成时间: ${{ steps.organize.outputs.build_time }}*
@@ -313,6 +319,7 @@ jobs:
           - 🏮 **LuCI 版本 (Immortal)**: `${{ github.event.inputs.luci_version || '默认(25.12)' }}`
           - 🧩 **额外插件**: `${{ github.event.inputs.extra_plugins || '无' }}`
           - 💾 **编译缓存**: `${{ github.event.inputs.use_cache }}`
+          - 🔛 **NSS**: `${{github.event.inputs.enable_nss}}`
           
           ---
           🕒 *编译完成时间: ${{ steps.organize.outputs.build_time }}*
