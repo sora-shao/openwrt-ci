@@ -64,10 +64,10 @@ jobs:
           echo "统计: 共计 $COUNT 个"
 
           # 2. 清理逻辑：保留最新的 10 个
-          if [ "$COUNT" -le 10 ]; then
+          if [ "$COUNT" -le 4 ]; then
             echo "✅ 数量为 $COUNT，未超过 10 个，无需清理。"
           else
-            DELETE_LIMIT=$((COUNT - 10))
+            DELETE_LIMIT=$((COUNT - 4))
             echo "⚠️ 触发清理：准备删除最早的 $DELETE_LIMIT 个..."
             
             # 提取排序后最老（数组最前面）的 N 个
